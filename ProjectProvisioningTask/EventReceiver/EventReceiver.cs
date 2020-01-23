@@ -21,6 +21,7 @@ namespace ProjectProvisioningTask.EventReceiver
             {
                 return;
             }
+
             using (var web = properties.Web)
             {
                 var item = properties.ListItem;
@@ -34,40 +35,71 @@ namespace ProjectProvisioningTask.EventReceiver
                     return;
                 }
 
-                var subweb = web.Webs.Add(
+                using (var subweb = web.Webs.Add(
                     item.Title.ToLower(),
                     item.Title, item["Description"] as string,
                     web.Language,
                     SPWebTemplate.WebTemplateSTS,
                     false,
                     false
-                    );
-
-                subweb.BreakRoleInheritance(false, false);
-
-                var strOwners = $"{item.Title} Owners";
-                var strMembers = $"{item.Title} Members";
-                var strVisitors = $"{item.Title} Visitors";
-
-                subweb.SiteGroups.Add(strOwners, subweb.CurrentUser, null, null);
-                subweb.SiteGroups.Add(strMembers, subweb.CurrentUser, null, null);
-                subweb.SiteGroups.Add(strVisitors, subweb.CurrentUser, null, null);
-
-                Func<SPFieldUserValue, SPUserInfo> del = x => new SPUserInfo()
+                    ))
                 {
-                    Name = x.User.Name,
-                    Email = x.User.Email,
-                    LoginName = x.User.LoginName,
-                    Notes = x.User.Notes
-                };
+                    item["Project Status"] = "In Provisioning";
 
-                subweb.SiteGroups[strMembers].Users.AddCollection(owners?.Select(del)?.ToArray());
+                    subweb.BreakRoleInheritance(false, false);
 
-                subweb.SiteGroups[strMembers].Users.AddCollection(members?.Select(del)?.ToArray());
+                    var strOwners = $"{item.Title} Owners";
+                    var strMembers = $"{item.Title} Members";
+                    var strVisitors = $"{item.Title} Visitors";
 
-                subweb.SiteGroups[strVisitors].Users.AddCollection(visitors?.Select(del)?.ToArray());
+                    subweb.SiteGroups.Add(strOwners, subweb.CurrentUser, null, null);
+                    subweb.SiteGroups.Add(strMembers, subweb.CurrentUser, null, null);
+                    subweb.SiteGroups.Add(strVisitors, subweb.CurrentUser, null, null);
 
+                    Func<SPFieldUserValue, SPUserInfo> del = x => new SPUserInfo()
+                    {
+                        Name = x.User.Name,
+                        Email = x.User.Email,
+                        LoginName = x.User.LoginName,
+                        Notes = x.User.Notes
+                    };
 
+                    subweb.SiteGroups[strMembers].Users.AddCollection(owners?.Select(del)?.ToArray());
+                    subweb.SiteGroups[strMembers].Users.AddCollection(members?.Select(del)?.ToArray());
+                    subweb.SiteGroups[strVisitors].Users.AddCollection(visitors?.Select(del)?.ToArray());
+
+                    subweb.Lists.Add("Project Tasks", null, SPListTemplateType.Tasks);
+                    var guidDocs = subweb.Lists.Add("Project Documents", null, SPListTemplateType.DocumentLibrary);
+                    subweb.Lists.Add("Project Notes", null, SPListTemplateType.GenericList);
+
+                    var docList = subweb.Lists[guidDocs];
+
+                    var titleField = docList.Fields.CreateNewField(SPFieldType.Text.ToString(), "Project Title");
+                    titleField.Required = true;
+                    titleField.DefaultValue = item.Title;
+                    docList.Fields.Add(titleField);
+
+                    var descriptionField = docList.Fields.CreateNewField(SPFieldType.Note.ToString(), "Project Description");
+                    descriptionField.Required = false;
+                    descriptionField.DefaultValue = item["Description"] as string;
+                    docList.Fields.Add(descriptionField);
+
+                    var addressField = docList.Fields.CreateNewField(SPFieldType.Note.ToString(), "Project Address");
+                    addressField.Required = false;
+                    addressField.DefaultValue = item["Address"] as string;
+                    docList.Fields.Add(addressField);
+
+                    var categoryField = docList.Fields.CreateNewField(SPFieldType.Choice.ToString(), "Project Category");
+                    categoryField.Required = true;
+                    categoryField.DefaultValue = item["Category"] as string;
+                    docList.Fields.Add(categoryField);
+
+                    docList.Update();
+
+                    item["Project Status"] = "Active";
+
+                    item.Update();
+                }
             }
         }
     }
