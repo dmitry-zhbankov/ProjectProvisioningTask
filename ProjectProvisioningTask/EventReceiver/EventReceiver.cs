@@ -6,12 +6,15 @@ using Microsoft.SharePoint.Workflow;
 using System.Linq;
 using System.Collections.Generic;
 using static ProjectProvisioningTask.EventReceiver.ProjectStringConstants;
+using Microsoft.SharePoint.Administration;
 
 namespace ProjectProvisioningTask.EventReceiver
 {
     public static class ProjectStringConstants
     {
         public const string ProjectListTitle = "Projects";
+
+        public const string AuditListTitle = "Provisioning Infos";
 
         public static class Project
         {
@@ -53,6 +56,50 @@ namespace ProjectProvisioningTask.EventReceiver
             public const string ProjectAddress = "Project Address";
             public const string ProjectCategory = "Project Category";
         }
+
+        public static class ProjectAuditFields
+        {
+            public const string User = "User";
+            public const string Url = "Project Site URL";
+            public const string Action = "Action";
+        }
+
+    }
+
+    public class ULSLogger : ILogger
+    {
+        SPDiagnosticsService _service;
+        public ULSLogger()
+        {
+            _service = SPDiagnosticsService.Local;
+        }
+
+        void Log(TraceSeverity traceSeverity, EventSeverity eventSeverity, string message)
+        {
+            _service.WriteTrace(0, new SPDiagnosticsCategory("My Category", traceSeverity, eventSeverity), traceSeverity, message);
+        }
+
+        public void LogError(string message)
+        {
+            Log(TraceSeverity.Unexpected, EventSeverity.Error, message);
+        }
+
+        public void LogInformation(string message)
+        {
+            Log(TraceSeverity.Verbose, EventSeverity.Information, message);
+        }
+
+        public void LogWarning(string message)
+        {
+            Log(TraceSeverity.Medium, EventSeverity.Warning, message);
+        }
+    }
+
+    public interface ILogger
+    {
+        void LogError(string message);
+        void LogWarning(string message);
+        void LogInformation(string message);
     }
 
     /// <summary>
@@ -72,8 +119,65 @@ namespace ProjectProvisioningTask.EventReceiver
                 return;
             }
 
+            ILogger logger = new ULSLogger();
+
+            var audit = new ProvisionAudit(properties.Web);
+
+
             var worker = new ProvisionWorker(properties.Web, properties.ListItem);
+            worker.ProvisionStarted += new ProvisionWorker.ProvisionStartedEventHandler((sender, args) =>
+            {
+                logger.LogInformation(args.Action);
+
+            });
+
             worker.DoWork();
+        }
+    }
+
+    public class ProvisionAudit
+    {
+        SPWeb _web;
+        SPList _list;
+
+        public ProvisionAudit(SPWeb web)
+        {
+            _web = web;
+            CreateAuditList();
+        }
+
+        public void Audit(string user, string url, string action)
+        {
+            var item= _list.AddItem();
+            item[ProjectAuditFields.User] = user;
+            item[ProjectAuditFields.Url] = url;
+            item[ProjectAuditFields.Action] = action;
+            item.Update();
+        }
+
+        private void CreateAuditList()
+        {
+            var guidAuditList = _web.Lists.Add(AuditListTitle, null, SPListTemplateType.GenericList);
+            _list = _web.Lists[guidAuditList];
+
+            var userField = _list.Fields.CreateNewField(SPFieldType.Text.ToString(), ProjectAuditFields.User);
+            userField.Required = false;
+            userField.ShowInViewForms = true;
+            _list.Fields.Add(userField);
+
+            var urlField = _list.Fields.CreateNewField(SPFieldType.Text.ToString(), ProjectAuditFields.Url);
+            userField.Required = false;
+            userField.ShowInViewForms = true;
+            _list.Fields.Add(urlField);
+
+            var actionField = _list.Fields.CreateNewField(SPFieldType.Text.ToString(), ProjectAuditFields.Url);
+            userField.Required = false;
+            userField.ShowInViewForms = true;
+            _list.Fields.Add(actionField);
+
+            _list.Fields.Add(userField);
+            _list.Fields.Add(urlField);
+            _list.Fields.Add(actionField);
         }
     }
 
@@ -102,7 +206,7 @@ namespace ProjectProvisioningTask.EventReceiver
 
             if (_web.Webs.Any(x => x.Title == _item.Title))
             {
-                ProvisionCompleted.Invoke(this, new ProvisionCompletedEventArgs());
+                ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs());
                 return;
             }
 
@@ -112,7 +216,7 @@ namespace ProjectProvisioningTask.EventReceiver
 
             if (!owners.Any(x => x.User.ID == _web.CurrentUser.ID))
             {
-                ProvisionCompleted.Invoke(this, new ProvisionCompletedEventArgs());
+                ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs());
                 return;
             }
 
@@ -138,7 +242,7 @@ namespace ProjectProvisioningTask.EventReceiver
                 _item.Update();
             }
 
-            ProvisionCompleted.Invoke(this, new ProvisionCompletedEventArgs());
+            ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs());
         }
 
         private void CreateLists(SPWeb subweb)
@@ -209,15 +313,33 @@ namespace ProjectProvisioningTask.EventReceiver
         }
     }
 
-    public class SubWebCreatingEventArgs
-    {        
+    public class ProvisionEventArgs : EventArgs
+    {
+        public SPUser User { get; }
+        public string Url { get; }
+        public virtual string Action { get; }
     }
 
-    public class ProvisionCompletedEventArgs
+    public enum ProvisionResultStatus
     {
+        Failed,
+
+        Completed
     }
 
-    public class ProvisionStartedEventArgs
+    public class SubWebCreatingEventArgs : ProvisionEventArgs
     {
+        public override string Action { get; } = "SubWeb creating";
+    }
+
+    public class ProvisionCompletedEventArgs : ProvisionEventArgs
+    {
+        public override string Action { get; } = "Provision completed";
+        public ProvisionResultStatus Status { get; }
+    }
+
+    public class ProvisionStartedEventArgs : ProvisionEventArgs
+    {
+        public override string Action { get; } = "Provision started";
     }
 }
