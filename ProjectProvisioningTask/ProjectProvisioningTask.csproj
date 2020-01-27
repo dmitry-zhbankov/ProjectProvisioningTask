@@ -53,14 +53,25 @@
     <Reference Include="Microsoft.SharePoint.Client.ServerRuntime" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="EventReceiver\EventReceiver.cs" />
+    <Compile Include="Models\Project.cs" />
+    <Compile Include="ProjectER\ProjectER.cs" />
+    <Compile Include="Logger\ILogger.cs" />
+    <Compile Include="Constants\ProjectConstants.cs" />
+    <Compile Include="Audit\ProvisionAudit.cs" />
+    <Compile Include="ProjectEventArgs\ProvisionCompletedEventArgs.cs" />
+    <Compile Include="ProjectEventArgs\ProvisionEventArgs.cs" />
+    <Compile Include="Constants\ProvisionResultStatus.cs" />
+    <Compile Include="ProjectEventArgs\ProvisionStartedEventArgs.cs" />
+    <Compile Include="Worker\ProvisionWorker.cs" />
+    <Compile Include="ProjectEventArgs\SubWebCreatingEventArgs.cs" />
+    <Compile Include="Logger\ULSLogger.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="EventReceiver\SharePointProjectItem.spdata">
+    <None Include="ProjectER\SharePointProjectItem.spdata">
       <SharePointProjectItemId>{3a963bdf-6737-432e-aa97-42515b998d2e}</SharePointProjectItemId>
     </None>
-    <None Include="Features\Feature1\Feature1.feature">
+    <None Include="Features\ProvisioningFeature\ProvisioningFeature.feature">
       <FeatureId>{1c8b836d-ca31-4802-b021-e0879665278c}</FeatureId>
     </None>
     <None Include="key.snk" />
@@ -72,11 +83,12 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="EventReceiver\Elements.xml" />
-    <Content Include="Features\Feature1\Feature1.Template.xml">
-      <DependentUpon>Feature1.feature</DependentUpon>
+    <Content Include="ProjectER\Elements.xml" />
+    <Content Include="Features\ProvisioningFeature\ProvisioningFeature.Template.xml">
+      <DependentUpon>ProvisioningFeature.feature</DependentUpon>
     </Content>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>

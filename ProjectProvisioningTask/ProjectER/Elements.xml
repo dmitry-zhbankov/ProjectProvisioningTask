@@ -2,10 +2,10 @@
 <Elements xmlns="http://schemas.microsoft.com/sharepoint/">
 <Receivers>
 <Receiver>
-<Name>EventReceiverItemAdded</Name>
+<Name>ProjectERItemAdded</Name>
 <Type>ItemAdded</Type>
 <Assembly>$SharePoint.Project.AssemblyFullName$</Assembly>
-<Class>ProjectProvisioningTask.EventReceiver.EventReceiver</Class>
+<Class>ProjectProvisioningTask.ProjectER.ProjectER</Class>
 <SequenceNumber>10000</SequenceNumber>
 </Receiver>
 </Receivers>
