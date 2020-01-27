@@ -53,6 +53,5 @@
             public const string Url = "Project Site URL";
             public const string Action = "Action";
         }
-
     }
 }
