@@ -4,13 +4,13 @@ using Microsoft.SharePoint;
 using Microsoft.SharePoint.Utilities;
 using Microsoft.SharePoint.Workflow;
 using System.Collections.Generic;
-using ProjectProvisioningTask.Audit;
-using ProjectProvisioningTask.Constants;
-using ProjectProvisioningTask.Logger;
-using ProjectProvisioningTask.Models;
-using Project = ProjectProvisioningTask.Models.Project;
+using Test.Project.Provisioning.Models;
+using Test.Project.Provisioning.Constants;
+using Test.Project.Provisioning.Log;
+using Test.Project.Provisioning.Worker;
+using Project = Test.Project.Provisioning.Models.Project;
 
-namespace ProjectProvisioningTask.ProjectER
+namespace Test.Project.Provisioning.ProjectER
 {
     /// <summary>
     /// List Item Events
@@ -27,37 +27,34 @@ namespace ProjectProvisioningTask.ProjectER
                 return;
             }
 
-            ILogger logger = new ULSLogger();
+            IExtendedLogger logger = new ULSLogger();
 
             try
             {
                 base.ItemAdded(properties);
 
                 var item = properties.ListItem;
-
                 var web = properties.Web;
 
                 var completion = new CompletionComponent(item);
 
-                var project = new Project(properties);
+                var project = new Models.Project(properties);
 
                 ILogger audit = new ProvisionAudit(project, web);
 
                 var worker = new ProvisionWorker(project, web);
-
+                
                 worker.Loggers.Add(logger);
                 worker.Loggers.Add(audit);
 
-                //worker.ProvisionStarted += (sender, args) =>
-                //{
-                //    logger.Log(args.Action, LogSeverity.Information);
-                //};
-
-                completion.SetStatus(ProjectConstants.ProjectStatus.InProvisioning);
+                worker.ProvisionStarted += (sender, args) =>
+                {
+                    completion.SetStatus(ProjectConstants.ProjectStatus.InProvisioning);
+                };
 
                 worker.ProvisionCompleted += (sender, args) =>
                 {
-                    if (args.Status==ProvisionResultStatus.Completed)
+                    if (args.Status==ProvisionResultStatus.Succeed)
                     {
                         completion.SetStatus(ProjectConstants.ProjectStatus.Active);
                     }
@@ -65,26 +62,10 @@ namespace ProjectProvisioningTask.ProjectER
                 
                 worker.Provision();
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
-                logger.Log(ex.Message,LogSeverity.Error);
+                logger.LogError(e.Message);
             }
-        }
-    }
-
-    public class CompletionComponent
-    {
-        private SPItem _item;
-
-        public CompletionComponent(SPItem item)
-        {
-            _item = item;
-        }
-
-        public void SetStatus(string status)
-        {
-            _item[ProjectConstants.Project.Status] = status;
-            _item.Update();
         }
     }
 }

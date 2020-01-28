@@ -2,30 +2,33 @@
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.SharePoint;
-using ProjectProvisioningTask.Constants;
-using ProjectProvisioningTask.Log;
-using ProjectProvisioningTask.Logger;
-using ProjectProvisioningTask.Models;
-using ProjectProvisioningTask.ProjectEventArgs;
+using Test.Project.Provisioning.Models;
+using Test.Project.Provisioning.Constants;
+using Test.Project.Provisioning.Log;
+using Test.Project.Provisioning.ProjectEventArgs;
 
-namespace ProjectProvisioningTask.ProjectER
+namespace Test.Project.Provisioning.Worker
 {
     public class ProvisionWorker : IPublisher
     {
-        private Project _project;
+        private Models.Project _project;
         private SPWeb _web;
 
         public delegate void ProvisionStartedEventHandler(object sender, ProvisionStartedEventArgs args);
         public delegate void ProvisionCompletedEventHandler(object sender, ProvisionCompletedEventArgs args);
         public delegate void SubWebCreatingEventHandler(object sender, SubWebCreatingEventArgs args);
+        public delegate void GroupsCreatingEventHandler(object sender, GroupsCreatingEventArgs args);
+        public delegate void ListsCreatingEventHandler(object sender, ListsCreatingEventArgs args);
 
         public event ProvisionStartedEventHandler ProvisionStarted;
         public event ProvisionCompletedEventHandler ProvisionCompleted;
         public event SubWebCreatingEventHandler SubWebCreating;
+        public event GroupsCreatingEventHandler GroupsCreating;
+        public event ListsCreatingEventHandler ListsCreating;
 
         public IList<ILogger> Loggers { get; set; }
 
-        public ProvisionWorker(Project project, SPWeb web)
+        public ProvisionWorker(Models.Project project, SPWeb web)
         {
             _project = project;
             _web = web;
@@ -39,54 +42,98 @@ namespace ProjectProvisioningTask.ProjectER
                     logger.Log(args.Action, LogSeverity.Information);
                 }
             };
+
+            ProvisionCompleted += (sender, args) =>
+            {
+                foreach (var logger in Loggers)
+                {
+                    logger.Log(args.Action,
+                        args.Status == ProvisionResultStatus.Succeed ? LogSeverity.Information : LogSeverity.Error);
+                }
+            };
+
+            SubWebCreating += (sender, args) =>
+            {
+                foreach (var logger in Loggers)
+                {
+                    logger.Log(args.Action, LogSeverity.Information);
+                }
+            };
+
+            GroupsCreating += (sender, args) =>
+            {
+                foreach (var logger in Loggers)
+                {
+                    logger.Log(args.Action, LogSeverity.Information);
+                }
+            };
         }
 
         public void Provision()
         {
-            ProvisionStarted?.Invoke(this, new ProvisionStartedEventArgs());
+            ProvisionStarted?.Invoke(this, new ProvisionStartedEventArgs(_project.Url, _project.User));
 
             if (_web.Webs.Any(x => x.Title == _project.Title))
             {
-                ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs());
+                ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs(_project.Url, _project.User, ProvisionResultStatus.Failed));
                 return;
             }
 
             if (_project.Owners == null || _project.Owners.All(x => x.User.ID != _project.User.ID))
             {
-                ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs());
+                ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs(_project.Url, _project.User, ProvisionResultStatus.Failed));
                 return;
             }
 
-            SubWebCreating?.Invoke(this, new SubWebCreatingEventArgs());
+            CreateSubWeb();
 
-            using (var subweb = _web.Webs.Add(
-                _project.Title.ToLower(),
-                _project.Title, _project.Description,
-                _web.Language,
-                SPWebTemplate.WebTemplateSTS,
-                false,
-                false
-            ))
-            {
-                _project.Url = subweb.Url;
-
-                CreateSiteGroups(subweb, _project.Owners, _project.Members, _project.Visitors);
-
-                CreateLists(subweb);
-            }
-
-            ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs());
+            ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs(_project.Url, _project.User, ProvisionResultStatus.Succeed));
         }
 
-        private void CreateLists(SPWeb subweb)
+        private void CreateSubWeb()
         {
-            subweb.Lists.Add(ProjectConstants.Lists.Tasks, null, SPListTemplateType.Tasks);
-            var guidDocs = subweb.Lists.Add(ProjectConstants.Lists.Documents, null, SPListTemplateType.DocumentLibrary);
-            subweb.Lists.Add(ProjectConstants.Lists.Notes, null, SPListTemplateType.GenericList);
+            SubWebCreating?.Invoke(this, new SubWebCreatingEventArgs(_project.Url, _project.User));
 
-            var docList = subweb.Lists[guidDocs];
+            try
+            {
+                using (var subweb = _web.Webs.Add(
+                    _project.Title,
+                    _project.Title, _project.Description,
+                    _web.Language,
+                    SPWebTemplate.WebTemplateSTS,
+                    false,
+                    false
+                ))
+                {
+                    CreateSiteGroups(subweb, _project.Owners, _project.Members, _project.Visitors);
 
-            AddDocLibFields(docList);
+                    CreateLists(subweb);
+                }
+            }
+            catch
+            {
+                ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs(_project.Url, _project.User, ProvisionResultStatus.Failed,ProjectConstants.ProjectExceptions.WorkerExceptions.SubWebCreationFailed));
+            }
+        }
+
+        private void CreateLists(SPWeb web)
+        {
+            ListsCreating?.Invoke(this, new ListsCreatingEventArgs(_project.Url, _project.User));
+
+            try
+            {
+                web.Lists.Add(ProjectConstants.Lists.Tasks, null, SPListTemplateType.Tasks);
+                var guidDocs = web.Lists.Add(ProjectConstants.Lists.Documents, null, SPListTemplateType.DocumentLibrary);
+                web.Lists.Add(ProjectConstants.Lists.Notes, null, SPListTemplateType.GenericList);
+
+                var docList = web.Lists[guidDocs];
+
+                AddDocLibFields(docList);
+            }
+            catch
+            {
+                ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs(_project.Url, _project.User, ProvisionResultStatus.Failed, ProjectConstants.ProjectExceptions.WorkerExceptions.SiteListsCreationFailed));
+            }
         }
 
         private void AddDocLibFields(SPList docList)
@@ -123,6 +170,7 @@ namespace ProjectProvisioningTask.ProjectER
             docList.Update();
 
             var view = docList.DefaultView;
+            view.ViewFields.Add(docList.Fields.GetFieldByInternalName(strTitleField));
             view.ViewFields.Add(docList.Fields.GetFieldByInternalName(strDescriptionField));
             view.ViewFields.Add(docList.Fields.GetFieldByInternalName(strAddressField));
             view.ViewFields.Add(docList.Fields.GetFieldByInternalName(strCategoryField));
@@ -130,31 +178,49 @@ namespace ProjectProvisioningTask.ProjectER
             view.Update();
         }
 
-        private void CreateSiteGroups(SPWeb subweb, SPFieldUserValueCollection owners, SPFieldUserValueCollection members, SPFieldUserValueCollection visitors)
+        private void CreateSiteGroups(SPWeb web, SPFieldUserValueCollection owners, SPFieldUserValueCollection members, SPFieldUserValueCollection visitors)
         {
-            subweb.BreakRoleInheritance(false, false);
+            GroupsCreating?.Invoke(this, new GroupsCreatingEventArgs(_project.Url, _project.User));
 
-            AddSiteGroup(subweb, owners, ProjectConstants.Project.Owners);
-            AddSiteGroup(subweb, members, ProjectConstants.Project.Members);
-            AddSiteGroup(subweb, visitors, ProjectConstants.Project.Visitors);
+            try
+            {
+                web.BreakRoleInheritance(false, false);
 
-            //var role = _web.RoleDefinitions.GetByType(SPRoleType.Guest);
+                AddSiteGroup(web, owners, ProjectConstants.Project.Owners, _web.RoleDefinitions.GetByType(SPRoleType.Administrator));
+                AddSiteGroup(web, members, ProjectConstants.Project.Members, _web.RoleDefinitions.GetByType(SPRoleType.Editor));
+                AddSiteGroup(web, visitors, ProjectConstants.Project.Visitors, _web.RoleDefinitions.GetByType(SPRoleType.Reader));
+            }
+            catch
+            {
+                ProvisionCompleted?.Invoke(this, new ProvisionCompletedEventArgs(_project.Url, _project.User, ProvisionResultStatus.Failed, ProjectConstants.ProjectExceptions.WorkerExceptions.SiteGroupsCreationFailed));
+            }
         }
 
-        private void AddSiteGroup(SPWeb web, SPFieldUserValueCollection users, string group)
+        private void AddSiteGroup(SPWeb web, SPFieldUserValueCollection users, string group, SPRoleDefinition role)
         {
+            if (users==null)
+            {
+                return;
+            }
+
             var strGroup = $"{_project.Title} {group}";
             web.SiteGroups.Add(strGroup, web.CurrentUser, null, null);
 
-            Func<SPFieldUserValue, SPUserInfo> del = x => new SPUserInfo()
+            web.SiteGroups[strGroup].Users.AddCollection(users.Select(x => new SPUserInfo()
             {
                 Name = x.User.Name,
                 Email = x.User.Email,
                 LoginName = x.User.LoginName,
                 Notes = x.User.Notes
-            };
+            })
+                .ToArray());
 
-            web.SiteGroups[strGroup].Users.AddCollection(users?.Select(del)?.ToArray());
+            foreach (var user in users)
+            {
+                var roleAssignment = new SPRoleAssignment(user.User);
+                roleAssignment.RoleDefinitionBindings.Add(role);
+                web.RoleAssignments.Add(roleAssignment);
+            }
         }
     }
 }

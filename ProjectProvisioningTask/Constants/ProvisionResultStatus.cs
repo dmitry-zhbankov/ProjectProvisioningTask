@@ -1,9 +1,9 @@
-﻿namespace ProjectProvisioningTask.Constants
+﻿namespace Test.Project.Provisioning.Constants
 {
     public enum ProvisionResultStatus
     {
         Failed,
 
-        Completed
+        Succeed
     }
 }

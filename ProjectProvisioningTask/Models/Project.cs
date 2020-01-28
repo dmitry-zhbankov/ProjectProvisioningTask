@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SharePoint;
-using ProjectProvisioningTask.Constants;
+using Test.Project.Provisioning.Constants;
 
-namespace ProjectProvisioningTask.Models
+namespace Test.Project.Provisioning.Models
 {
     public class Project
     {
@@ -48,8 +48,8 @@ namespace ProjectProvisioningTask.Models
             var web = properties.Web;
 
             User = web.CurrentUser;
-            //concat url
-            Url = web.Url;
+            
+            Url = $"{web.Url}/{Title}";
         }
     }
 }

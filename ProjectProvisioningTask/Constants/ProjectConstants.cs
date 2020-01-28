@@ -1,4 +1,4 @@
-﻿namespace ProjectProvisioningTask.Constants
+﻿namespace Test.Project.Provisioning.Constants
 {
     public static class ProjectConstants
     {
@@ -49,9 +49,21 @@
 
         public static class ProjectAuditFields
         {
+            public const string Title = "Title";
+            public const string Time = "Time";
             public const string User = "User";
             public const string Url = "Project Site URL";
             public const string Action = "Action";
+        }
+
+        public static class ProjectExceptions
+        {
+            public class WorkerExceptions
+            {
+                public const string SubWebCreationFailed = "Subweb creation failed";
+                public const string SiteGroupsCreationFailed = "Site groups creation failed";
+                public const string SiteListsCreationFailed = "Site lists creation failed";
+            }
         }
     }
 }

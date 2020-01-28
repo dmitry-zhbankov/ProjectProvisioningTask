@@ -5,7 +5,7 @@
 <Name>ProjectERItemAdded</Name>
 <Type>ItemAdded</Type>
 <Assembly>$SharePoint.Project.AssemblyFullName$</Assembly>
-<Class>ProjectProvisioningTask.ProjectER.ProjectER</Class>
+<Class>Test.Project.Provisioning.ProjectER.ProjectER</Class>
 <SequenceNumber>10000</SequenceNumber>
 </Receiver>
 </Receivers>

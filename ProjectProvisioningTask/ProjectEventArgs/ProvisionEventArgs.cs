@@ -1,6 +1,6 @@
 ﻿using Microsoft.SharePoint;
 
-namespace ProjectProvisioningTask.ProjectEventArgs
+namespace Test.Project.Provisioning.ProjectEventArgs
 {
     public abstract class ProvisionEventArgs : System.EventArgs
     {
@@ -9,5 +9,11 @@ namespace ProjectProvisioningTask.ProjectEventArgs
         public string Url { get; protected set; }
 
         public abstract string Action { get; }
+
+        protected ProvisionEventArgs(string url, SPUser user)
+        {
+            Url = url;
+            User = user;
+        }
     }
 }
